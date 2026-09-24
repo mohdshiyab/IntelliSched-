@@ -4,6 +4,8 @@ A smart college timetable generator that automatically schedules classes, preven
 
 Built with **Python (FastAPI)**, **Google OR-Tools**, and **React (Tailwind CSS)**.
 
+🌐 **Live Demo**: [https://frontend-three-rust-94.vercel.app](https://frontend-three-rust-94.vercel.app)
+
 ---
 
 ## 💡 What is IntelliSched?
