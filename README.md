@@ -111,3 +111,27 @@ cd frontend
 npm run dev
 ```
 - Open your browser to: **`http://localhost:5173`**
+
+---
+
+## ☁️ Cloud Hosting
+
+### Frontend (Live on Vercel)
+The frontend is already deployed and live at:
+👉 **[https://frontend-three-rust-94.vercel.app](https://frontend-three-rust-94.vercel.app)**
+
+*(Includes a built-in simulation engine so it works standalone even if the backend is not running).*
+
+### Backend (Deploy to Render.com in 2 Minutes)
+The repository includes a ready-to-deploy `render.yaml` and `Dockerfile`.
+
+1. Go to [render.com](https://render.com) and log in with your GitHub account.
+2. Click **New +** ➔ **Web Service**.
+3. Select your repository: **`mohdshiyab/IntelliSched-`**.
+4. Configure the settings:
+   - **Root Directory**: `backend`
+   - **Runtime**: `Python 3`
+   - **Build Command**: `pip install -r requirements.txt`
+   - **Start Command**: `uvicorn main:app --host 0.0.0.0 --port $PORT`
+5. Click **Create Web Service**. Render will give you a public HTTPS URL (e.g. `https://intellisched-backend.onrender.com`).
+
