@@ -1,9 +1,38 @@
+import os
+import json
 import copy
 from typing import Dict, List, Optional
+from dotenv import load_dotenv
+from sqlalchemy import create_engine, Column, String, Integer, Boolean, Text
+from sqlalchemy.orm import declarative_base, sessionmaker
+
 from models import (
     Division, Subject, Faculty, Classroom, TimeSlotDef, 
     ConstraintSettings, TimetableEntry, ConflictItem, TimetableStatus
 )
+
+# Load environment variables from .env
+load_dotenv()
+
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./timetable.db")
+
+# Setup SQLAlchemy Engine
+if DATABASE_URL.startswith("sqlite"):
+    engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+else:
+    engine = create_engine(DATABASE_URL)
+
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()
+
+# SQLAlchemy ORM Table for Persistent Storage
+class AppEntity(Base):
+    __tablename__ = "app_entities"
+    key = Column(String(100), primary_key=True, index=True)
+    entity_type = Column(String(50), index=True)
+    payload = Column(Text, nullable=False)
+
+Base.metadata.create_all(bind=engine)
 
 DAYS_OF_WEEK = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
 
@@ -30,7 +59,6 @@ DEFAULT_TIME_SLOTS = [
 TEACHING_PERIOD_COUNT = 6
 
 def generate_default_availability(unavailable_slots: Optional[List[tuple]] = None) -> Dict[str, List[bool]]:
-    """Returns availability for 5 days x 6 periods. unavailable_slots is a list of (day, period_1_indexed)"""
     avail = {day: [True] * TEACHING_PERIOD_COUNT for day in DAYS_OF_WEEK}
     if unavailable_slots:
         for day, p_num in unavailable_slots:
@@ -40,10 +68,90 @@ def generate_default_availability(unavailable_slots: Optional[List[tuple]] = Non
 
 class Database:
     def __init__(self):
-        self.reset_to_defaults()
+        self.divisions: Dict[str, Division] = {}
+        self.faculty: Dict[str, Faculty] = {}
+        self.classrooms: Dict[str, Classroom] = {}
+        self.subjects: Dict[str, Subject] = {}
+        self.constraints = ConstraintSettings()
+        self.time_slots = copy.deepcopy(DEFAULT_TIME_SLOTS)
+        self.days = list(DAYS_OF_WEEK)
+        self.timetable_entries: List[TimetableEntry] = []
+        self.conflicts: List[ConflictItem] = []
+        self.status = TimetableStatus()
+        self.recent_activities = []
+
+        # Load from SQL database or seed
+        if not self.load_from_sql():
+            self.reset_to_defaults()
+
+    def persist_to_sql(self):
+        """Saves current state into SQLite/Postgres database."""
+        session = SessionLocal()
+        try:
+            session.query(AppEntity).delete()
+
+            data_map = {
+                "divisions": {k: v.dict() for k, v in self.divisions.items()},
+                "faculty": {k: v.dict() for k, v in self.faculty.items()},
+                "classrooms": {k: v.dict() for k, v in self.classrooms.items()},
+                "subjects": {k: v.dict() for k, v in self.subjects.items()},
+                "constraints": self.constraints.dict(),
+                "entries": [e.dict() for e in self.timetable_entries],
+                "conflicts": [c.dict() for c in self.conflicts],
+                "status": self.status.dict(),
+                "recent_activities": self.recent_activities
+            }
+
+            for key, val in data_map.items():
+                record = AppEntity(key=key, entity_type=key, payload=json.dumps(val))
+                session.add(record)
+
+            session.commit()
+        except Exception as e:
+            session.rollback()
+            print(f"Error persisting to SQL database: {e}")
+        finally:
+            session.close()
+
+    def load_from_sql(self) -> bool:
+        """Loads state from SQLite/Postgres database."""
+        session = SessionLocal()
+        try:
+            records = session.query(AppEntity).all()
+            if not records:
+                return False
+
+            data = {r.key: json.loads(r.payload) for r in records}
+
+            if "divisions" in data:
+                self.divisions = {k: Division(**v) for k, v in data["divisions"].items()}
+            if "faculty" in data:
+                self.faculty = {k: Faculty(**v) for k, v in data["faculty"].items()}
+            if "classrooms" in data:
+                self.classrooms = {k: Classroom(**v) for k, v in data["classrooms"].items()}
+            if "subjects" in data:
+                self.subjects = {k: Subject(**v) for k, v in data["subjects"].items()}
+            if "constraints" in data:
+                self.constraints = ConstraintSettings(**data["constraints"])
+            if "entries" in data:
+                self.timetable_entries = [TimetableEntry(**e) for e in data["entries"]]
+            if "conflicts" in data:
+                self.conflicts = [ConflictItem(**c) for c in data["conflicts"]]
+            if "status" in data:
+                self.status = TimetableStatus(**data["status"])
+            if "recent_activities" in data:
+                self.recent_activities = data["recent_activities"]
+
+            return len(self.divisions) > 0
+        except Exception as e:
+            print(f"Error loading from SQL database: {e}")
+            return False
+        finally:
+            session.close()
 
     def reset_to_defaults(self):
-        self.divisions: Dict[str, Division] = {
+        """Initializes with rich default college seed data."""
+        self.divisions = {
             "DIV_CSE_A": Division(
                 id="DIV_CSE_A", name="CSE-A", department="Computer Science", 
                 year="3rd Year", semester=5, students=60, academic_year="2026-27"
@@ -58,7 +166,7 @@ class Database:
             ),
         }
 
-        self.faculty: Dict[str, Faculty] = {
+        self.faculty = {
             "FAC_RAVI": Faculty(
                 id="FAC_RAVI", name="Dr. Ravi Kumar", department="Computer Science",
                 title="Professor & HoD", subjects=["CS501", "CS503", "CS502L"],
@@ -103,7 +211,7 @@ class Database:
             )
         }
 
-        self.classrooms: Dict[str, Classroom] = {
+        self.classrooms = {
             "ROOM_A101": Classroom(
                 id="ROOM_A101", name="A-101", building="Academic Block A",
                 type="Classroom", capacity=70,
@@ -141,7 +249,7 @@ class Database:
             ),
         }
 
-        self.subjects: Dict[str, Subject] = {
+        self.subjects = {
             "SUB_CS501": Subject(
                 id="SUB_CS501", name="Database Management Systems", code="CS501",
                 department="Computer Science", type="Theory", sessions_per_week=4,
@@ -227,8 +335,8 @@ class Database:
         self.constraints = ConstraintSettings()
         self.time_slots = copy.deepcopy(DEFAULT_TIME_SLOTS)
         self.days = list(DAYS_OF_WEEK)
-        self.timetable_entries: List[TimetableEntry] = []
-        self.conflicts: List[ConflictItem] = []
+        self.timetable_entries = []
+        self.conflicts = []
         self.status = TimetableStatus(
             status="DRAFT",
             generated_at=None,
@@ -238,13 +346,14 @@ class Database:
             unassigned_classes=0,
             critical_conflicts=0,
             warnings=0,
-            soft_score=94,
+            soft_score=96,
             quality_label="Ready to Generate"
         )
         self.recent_activities = [
-            {"time": "Just now", "message": "System initialized with Master Data and Constraint Rules"},
+            {"time": "Just now", "message": "SQL Database connected with Master Data tables"},
             {"time": "10 min ago", "message": "Loaded 3 Divisions, 10 Subjects, 6 Faculty, and 7 Rooms"},
             {"time": "25 min ago", "message": "Updated Faculty Availability Matrix for Dr. Ravi & Dr. Kumar"},
         ]
+        self.persist_to_sql()
 
 db = Database()

@@ -65,6 +65,7 @@ def create_division(item: Division):
         "time": "Just now",
         "message": f"Added Division {item.name} ({item.department})"
     })
+    db.persist_to_sql()
     return item
 
 @app.put("/api/divisions/{id}", response_model=Division)
@@ -73,6 +74,7 @@ def update_division(id: str, item: Division):
         raise HTTPException(status_code=404, detail="Division not found")
     item.id = id
     db.divisions[id] = item
+    db.persist_to_sql()
     return item
 
 @app.delete("/api/divisions/{id}")
@@ -80,6 +82,7 @@ def delete_division(id: str):
     if id not in db.divisions:
         raise HTTPException(status_code=404, detail="Division not found")
     del db.divisions[id]
+    db.persist_to_sql()
     return {"success": True, "message": f"Division {id} deleted"}
 
 # ----------------- MASTER DATA: SUBJECTS -----------------
@@ -96,6 +99,7 @@ def create_subject(item: Subject):
         "time": "Just now",
         "message": f"Added Subject {item.code}: {item.name}"
     })
+    db.persist_to_sql()
     return item
 
 @app.put("/api/subjects/{id}", response_model=Subject)
@@ -104,6 +108,7 @@ def update_subject(id: str, item: Subject):
         raise HTTPException(status_code=404, detail="Subject not found")
     item.id = id
     db.subjects[id] = item
+    db.persist_to_sql()
     return item
 
 @app.delete("/api/subjects/{id}")
@@ -111,6 +116,7 @@ def delete_subject(id: str):
     if id not in db.subjects:
         raise HTTPException(status_code=404, detail="Subject not found")
     del db.subjects[id]
+    db.persist_to_sql()
     return {"success": True, "message": f"Subject {id} deleted"}
 
 # ----------------- MASTER DATA: FACULTY -----------------
@@ -127,6 +133,7 @@ def create_faculty(item: Faculty):
         "time": "Just now",
         "message": f"Added Faculty member {item.name}"
     })
+    db.persist_to_sql()
     return item
 
 @app.put("/api/faculty/{id}", response_model=Faculty)
@@ -135,6 +142,7 @@ def update_faculty(id: str, item: Faculty):
         raise HTTPException(status_code=404, detail="Faculty not found")
     item.id = id
     db.faculty[id] = item
+    db.persist_to_sql()
     return item
 
 @app.delete("/api/faculty/{id}")
@@ -142,6 +150,7 @@ def delete_faculty(id: str):
     if id not in db.faculty:
         raise HTTPException(status_code=404, detail="Faculty not found")
     del db.faculty[id]
+    db.persist_to_sql()
     return {"success": True, "message": f"Faculty {id} deleted"}
 
 # ----------------- MASTER DATA: CLASSROOMS -----------------
@@ -158,6 +167,7 @@ def create_classroom(item: Classroom):
         "time": "Just now",
         "message": f"Added Classroom {item.name} ({item.type}, cap: {item.capacity})"
     })
+    db.persist_to_sql()
     return item
 
 @app.put("/api/classrooms/{id}", response_model=Classroom)
@@ -166,6 +176,7 @@ def update_classroom(id: str, item: Classroom):
         raise HTTPException(status_code=404, detail="Classroom not found")
     item.id = id
     db.classrooms[id] = item
+    db.persist_to_sql()
     return item
 
 @app.delete("/api/classrooms/{id}")
@@ -173,6 +184,7 @@ def delete_classroom(id: str):
     if id not in db.classrooms:
         raise HTTPException(status_code=404, detail="Classroom not found")
     del db.classrooms[id]
+    db.persist_to_sql()
     return {"success": True, "message": f"Classroom {id} deleted"}
 
 # ----------------- MASTER DATA: TIME SLOTS -----------------
@@ -196,6 +208,7 @@ def update_constraints(settings: ConstraintSettings):
         "time": "Just now",
         "message": "Updated Scheduling Constraints and Optimization weights"
     })
+    db.persist_to_sql()
     return db.constraints
 
 # ----------------- PRE-GENERATION VALIDATION -----------------
@@ -247,6 +260,7 @@ def generate_timetable(req: GenerationRequest):
             "time": "Just now",
             "message": f"Successfully generated timetable ({len(entries)} classes assigned, 0 conflicts)"
         })
+        db.persist_to_sql()
 
         return {
             "success": True,
@@ -270,6 +284,7 @@ def generate_timetable(req: GenerationRequest):
             "time": "Just now",
             "message": "Timetable generation flagged impossible/conflicting constraints"
         })
+        db.persist_to_sql()
 
         return {
             "success": False,
@@ -398,6 +413,8 @@ def update_timetable_entry(id: str, updated: TimetableEntry):
         )
         db.status.critical_conflicts = len(db.conflicts)
 
+    db.persist_to_sql()
+
     return {
         "success": True,
         "entry": updated,
@@ -456,6 +473,7 @@ def resolve_conflict(id: str):
                 entry.conflict_notes = None
                 db.conflicts = [c for c in db.conflicts if c.id != id]
                 db.status.critical_conflicts = len(db.conflicts)
+                db.persist_to_sql()
                 return {
                     "success": True,
                     "message": f"Automatically moved to {alt['day']} {alt['time_label']} ({alt['classroom_name']})",
@@ -464,6 +482,7 @@ def resolve_conflict(id: str):
 
     db.conflicts = [c for c in db.conflicts if c.id != id]
     db.status.critical_conflicts = len(db.conflicts)
+    db.persist_to_sql()
     return {"success": True, "message": "Conflict dismissed"}
 
 # ----------------- PUBLISH TIMETABLE WORKFLOW -----------------
@@ -486,6 +505,7 @@ def publish_timetable():
         "time": "Just now",
         "message": "Official college timetable published to Faculty and Students portal"
     })
+    db.persist_to_sql()
     return {
         "success": True,
         "message": "Timetable published successfully!",
